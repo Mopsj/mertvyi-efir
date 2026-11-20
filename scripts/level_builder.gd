@@ -4,6 +4,7 @@ extends Node3D
 ## декали, звуковые маркеры, нав-сетка. Всё — процедурные плейсхолдеры.
 
 const CELL := 2.0
+const TEX_DIR := "res://assets/tex/"
 
 var map: Dictionary
 var grid: Array = []
@@ -16,6 +17,7 @@ var player_spawn_cell := Vector2i(1, 1)
 var monster_spawn_cell := Vector2i(-1, -1)
 var patrol_cells: Array[Vector2i] = []
 var speaker_positions: Array[Vector3] = []
+var light_sources: Array[Vector3] = []
 
 var _flicker: Array[Light3D] = []
 var _powered_fixtures: Array[MeshInstance3D] = []
@@ -23,6 +25,41 @@ var _powered_lights: Array[Light3D] = []
 var _drips: Array = []
 var _rng := RandomNumberGenerator.new()
 var _mats := {}
+var _tex_cache := {}
+
+
+# -------------------------------------------------------- PBR-материалы (Poly Haven, CC0)
+func _tex(fname: String) -> Texture2D:
+	if not _tex_cache.has(fname):
+		_tex_cache[fname] = load(TEX_DIR + fname)
+	return _tex_cache[fname]
+
+
+func _mat_pbr(set_name: String, tint: Color, metal := 0.0, tex_scale := 0.5, use_metal_ch := false) -> StandardMaterial3D:
+	var k := "pbr_" + set_name + "_" + tint.to_html(false) + str(metal) + str(tex_scale) + str(use_metal_ch)
+	if _mats.has(k):
+		return _mats[k]
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _tex(set_name + "_diff.jpg")
+	m.albedo_color = tint
+	m.normal_enabled = true
+	m.normal_texture = _tex(set_name + "_nor_gl.jpg")
+	var arm := _tex(set_name + "_arm.jpg")
+	m.ao_enabled = true
+	m.ao_texture = arm
+	m.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	m.roughness_texture = arm
+	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	m.metallic = metal
+	if use_metal_ch:
+		m.metallic = 1.0
+		m.metallic_texture = arm
+		m.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3.ONE * tex_scale
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_mats[k] = m
+	return m
 
 
 # ------------------------------------------------------------ материалы
@@ -60,6 +97,7 @@ func build(m: Dictionary) -> void:
 	_build_walls()
 	_build_nav()
 	_place_map_entities()
+	_place_safety_light()
 	_furnish_rooms()
 
 
@@ -83,8 +121,8 @@ func cell_of_world(pos: Vector3) -> Vector2i:
 
 
 func _build_slabs() -> void:
-	var fm := _mat("floor", Color(0.30, 0.31, 0.33), 0.9, 0.0, 0.05)
-	var cm := _mat("ceil", Color(0.26, 0.27, 0.29), 0.95, 0.0, 0.13)
+	var fm := _mat_pbr("concrete_floor_worn_001", Color(0.55, 0.56, 0.58), 0.0, 0.45)
+	var cm := _mat_pbr("concrete_wall_004", Color(0.30, 0.31, 0.33), 0.0, 0.35)
 	var floor_mi := MeshInstance3D.new()
 	var fb := BoxMesh.new()
 	fb.size = Vector3(w * CELL, 0.2, h * CELL)
@@ -116,8 +154,8 @@ func _add_slab_body(mi: MeshInstance3D) -> void:
 
 
 func _build_walls() -> void:
-	var wm := _mat("wall", Color(0.37, 0.38, 0.37), 0.92, 0.0, 0.07)
-	var bm := _mat("wall_b", Color(0.30, 0.31, 0.32), 0.95, 0.0, 0.11)
+	var wm := _mat_pbr("plastered_wall", Color(0.62, 0.63, 0.60), 0.0, 0.4)
+	var bm := _mat_pbr("concrete_wall_004", Color(0.52, 0.53, 0.56), 0.0, 0.4)
 	var wall_col := wm if int(map["id"]) == 1 else bm
 	for z in range(h):
 		var run_start := -1
@@ -177,7 +215,7 @@ func _make_window(x: int, z: int) -> void:
 	var fb := BoxMesh.new()
 	fb.size = Vector3(1.7, 1.3, 0.4)
 	frame.mesh = fb
-	frame.material_override = _mat("wall", Color(0.25, 0.26, 0.27), 0.9, 0.0, 0.07)
+	frame.material_override = _mat_pbr("metal_plate", Color(0.42, 0.43, 0.45), 0.0, 0.9, true)
 	frame.position = Vector3(wx, 1.6, wz) + dir * 0.55
 	frame.rotation.y = rot_y
 	add_child(frame)
@@ -203,6 +241,7 @@ func _make_window(x: int, z: int) -> void:
 	l.shadow_enabled = false
 	l.position = Vector3(wx, 1.6, wz) + dir * 1.5
 	add_child(l)
+	light_sources.append(l.position)
 
 	var sb := StaticBody3D.new()
 	sb.collision_layer = 1
@@ -270,6 +309,10 @@ func _place_map_entities() -> void:
 					_make_interact(BottlePickup.new(), pos)
 				"T":
 					_make_interact(EndTerminal.new(), pos)
+				"B":
+					_make_interact(BatteryPickup.new(), pos)
+				"c":
+					_make_interact(Lightstick.new(), pos)
 				"1", "2":
 					var link: Array = Game.STAIR_LINK[c]
 					var target: int = link[0] if link[1] == fid else link[1]
@@ -287,6 +330,38 @@ func _place_map_entities() -> void:
 					patrol_cells.append(Vector2i(x, z))
 
 
+## Эвакуационная безопасность SYS: фосфорные метки у проёмов и аварийные
+## дубли света в комнатах без постоянных источников (P0 anti-dead-dark).
+func _place_safety_light() -> void:
+	for z in range(h):
+		for x in range(w):
+			var c := _cell(x, z)
+			if c == "+" or c == "H":
+				var yaw := 0.0
+				if not (_is_floor(x - 1, z) and _is_floor(x + 1, z)):
+					yaw = PI * 0.5
+				_make_phosphor(cell_to_world(Vector2i(x, z)), yaw)
+			elif c == "1" or c == "2":
+				_make_phosphor(cell_to_world(Vector2i(x, z)), PI * 0.5)
+	for rd in map["rooms"]:
+		var r: Array = rd["rect"]
+		var has_light := false
+		for y in range(int(r[1]), int(r[3]) + 1):
+			for x in range(int(r[0]), int(r[2]) + 1):
+				var cc := _cell(x, y)
+				if cc == "L" or cc == "l" or cc == "r" or cc == "W":
+					has_light = true
+		if has_light:
+			continue
+		var cw := _center_cell(r)
+		if int(r[2]) - int(r[0]) > 5:
+			var cp := cell_to_world(cw)
+			_make_emergency(cp + Vector3(-3.0 * CELL, 0, 0))
+			_make_emergency(cp + Vector3(3.0 * CELL, 0, 0))
+		else:
+			_make_emergency(cell_to_world(cw))
+
+
 func _make_interact(node: Interactable, pos: Vector3) -> void:
 	add_child(node)
 	node.global_position = pos
@@ -302,7 +377,7 @@ func _make_door(x: int, z: int, locked: bool) -> void:
 	d.axis = axis
 	d.locked = locked
 	d.red = (not locked) and int(map["id"]) == 0 and z == 8 and x == 13
-	d.mat = _mat("door", Color(0.33, 0.33, 0.35), 0.55, 0.7, 0.11)
+	d.mat = _mat_pbr("rusty_metal_02", Color(0.55, 0.55, 0.57), 0.4, 0.8, true)
 	add_child(d)
 	d.global_position = cell_to_world(Vector2i(x, z))
 	if locked:
@@ -332,6 +407,7 @@ func _make_lamp(pos: Vector3, col: Color, energy: float, radius: float, flick: b
 	l.light_bake_mode = Light3D.BAKE_DYNAMIC
 	l.position = Vector3(pos.x, y - 0.35, pos.z)
 	add_child(l)
+	light_sources.append(l.position)
 	if flick:
 		_flicker.append(l)
 	else:
@@ -364,6 +440,52 @@ func _make_beacon(pos: Vector3) -> void:
 	var tw := l.create_tween().set_loops()
 	tw.tween_property(l, "light_energy", 0.12, 0.9).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(l, "light_energy", 0.7, 0.9).set_trans(Tween.TRANS_SINE)
+	light_sources.append(l.position)
+
+
+## Аварийный дублирующий свет: тёплый 2700K, без теней. Физика — аккумуляторные
+## LED-светильники эвакуационной системы. Гарантия P0: без фонаря не чёрный экран.
+func _make_emergency(pos: Vector3) -> void:
+	var y := ceil_h - 1.15
+	var fix := MeshInstance3D.new()
+	var fb := BoxMesh.new()
+	fb.size = Vector3(0.34, 0.14, 0.12)
+	fix.mesh = fb
+	var em := StandardMaterial3D.new()
+	em.albedo_color = Color(0.5, 0.42, 0.3)
+	em.emission_enabled = true
+	em.emission = Color(1.0, 0.62, 0.38)
+	em.emission_energy_multiplier = 1.6
+	fix.material_override = em
+	fix.position = Vector3(pos.x, y, pos.z)
+	add_child(fix)
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.62, 0.38)
+	l.light_energy = 0.55
+	l.omni_range = 5.5
+	l.shadow_enabled = false
+	l.position = Vector3(pos.x, y - 0.25, pos.z)
+	add_child(l)
+	light_sources.append(l.position)
+
+
+## Фосфоресцирующая эвакуационная метка: слабое зелёное свечение, читается
+## в темноте, отмечает проёмы (правило 9 — свет ведёт игрока).
+func _make_phosphor(pos: Vector3, yaw: float) -> void:
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(0.55, 0.10)
+	mi.mesh = pm
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.2, 0.28, 0.14)
+	m.emission_enabled = true
+	m.emission = Color(0.55, 0.75, 0.35)
+	m.emission_energy_multiplier = 0.85
+	mi.material_override = m
+	mi.position = Vector3(pos.x, 0.06, pos.z)
+	mi.rotation.y = yaw
+	add_child(mi)
+	light_sources.append(mi.position + Vector3(0, 0.3, 0))
 
 
 func _make_speaker(x: int, z: int) -> void:
