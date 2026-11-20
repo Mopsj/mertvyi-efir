@@ -68,7 +68,7 @@ func _ready() -> void:
 		add_child(arm)
 
 	_presence = AudioStreamPlayer3D.new()
-	_presence.stream = Sound.get("presence")
+	_presence.stream = Sound.stream("presence")
 	_presence.max_distance = 22.0
 	_presence.unit_size = 2.5
 	_presence.volume_db = -8.0
@@ -126,7 +126,7 @@ func _physics_process(delta: float) -> void:
 	_hear_level = maxf(0.0, _hear_level - delta * 0.12)
 
 	if state == State.HUNT:
-		var p := Game.player
+		var p = Game.player
 		if p != null and Game.current_floor == floor_id:
 			var d := global_position.distance_to(p.global_position)
 			if d < 1.5:
@@ -165,7 +165,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var wp := _path[_path_i]
-	var wp_w := Game.main.cell_to_world(floor_id, wp)
+	var wp_w: Vector3 = Game.main.cell_to_world(floor_id, wp)
 	var to := wp_w - global_position
 	to.y = 0.0
 	if to.length() < 0.7:
@@ -201,7 +201,7 @@ var _prev_pos := Vector3.ZERO
 func _goto_random_patrol() -> void:
 	if patrol_cells.is_empty() or astar == null or Game.main == null:
 		return
-	var from := Game.main.cell_of_world(floor_id, global_position)
+	var from: Vector2i = Game.main.cell_of_world(floor_id, global_position)
 	var c := patrol_cells[_rng.randi_range(0, patrol_cells.size() - 1)]
 	_path = astar.get_id_path(from, c)
 	_path_i = 0
@@ -210,8 +210,8 @@ func _goto_random_patrol() -> void:
 func _make_path_to_world(world_pos: Vector3) -> Array[Vector2i]:
 	if astar == null or Game.main == null:
 		return []
-	var from := Game.main.cell_of_world(floor_id, global_position)
-	var to := Game.main.cell_of_world(floor_id, world_pos)
+	var from: Vector2i = Game.main.cell_of_world(floor_id, global_position)
+	var to: Vector2i = Game.main.cell_of_world(floor_id, world_pos)
 	if from == to:
 		return []
 	return astar.get_id_path(from, to)

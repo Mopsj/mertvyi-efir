@@ -41,13 +41,13 @@ func _ready() -> void:
 func get_prompt() -> String:
 	if Game.power:
 		return "Щиток под напряжением"
-	return "[E] Установить предохранители (%d/3)" % Game.fuses
+	return "[E] Вставить предохранитель (%d/3)" % Game.fuses_installed
 
 
 func interact(_player: Node3D) -> void:
 	if Game.power:
 		return
-	if Game.fuses < Game.MAX_FUSES:
+	if Game.fuses <= 0:
 		Sound.play_at(self, "static_burst", global_position, -20.0, 12.0, 0.6)
 		return
 	if Game.install_fuse():

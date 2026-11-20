@@ -182,7 +182,7 @@ func _mimic_tick() -> void:
 		return
 	var best := sps[0]
 	var best_d := -1.0
-	var pp := Game.player.global_position
+	var pp: Vector3 = Game.player.global_position
 	for sp in sps:
 		var d := sp.distance_to(pp)
 		if d > best_d and d > 10.0:

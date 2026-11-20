@@ -95,3 +95,13 @@ func _toggle(by_monster: bool) -> void:
 		if is_instance_valid(_colshape):
 			_colshape.set_deferred("disabled", is_open)
 		_busy = false)
+
+
+func unlock_on_nodes(total: int) -> void:
+	if total >= Game.NODES_TOTAL:
+		locked = false
+
+
+func _exit_tree() -> void:
+	if Game.node_activated.is_connected(unlock_on_nodes):
+		Game.node_activated.disconnect(unlock_on_nodes)
