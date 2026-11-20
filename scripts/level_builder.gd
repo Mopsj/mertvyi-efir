@@ -92,6 +92,7 @@ func _build_slabs() -> void:
 	floor_mi.material_override = fm
 	floor_mi.position = Vector3(w * CELL * 0.5, -0.1, h * CELL * 0.5)
 	add_child(floor_mi)
+	_add_slab_body(floor_mi)
 	var ceil_mi := MeshInstance3D.new()
 	var cb := BoxMesh.new()
 	cb.size = fb.size
@@ -99,6 +100,19 @@ func _build_slabs() -> void:
 	ceil_mi.material_override = cm
 	ceil_mi.position = Vector3(w * CELL * 0.5, ceil_h + 0.1, h * CELL * 0.5)
 	add_child(ceil_mi)
+	_add_slab_body(ceil_mi)
+
+
+func _add_slab_body(mi: MeshInstance3D) -> void:
+	var sb := StaticBody3D.new()
+	sb.collision_layer = 1
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = (mi.mesh as BoxMesh).size
+	cs.shape = sh
+	sb.add_child(cs)
+	add_child(sb)
+	sb.position = mi.position
 
 
 func _build_walls() -> void:
@@ -139,8 +153,8 @@ func _add_wall_run(x0: int, x1: int, z: int, mat: StandardMaterial3D) -> void:
 	sh.size = b.size
 	cs.shape = sh
 	sb.add_child(cs)
-	sb.global_position = mi.position
 	add_child(sb)
+	sb.position = mi.position
 
 
 func _make_window(x: int, z: int) -> void:
@@ -189,6 +203,16 @@ func _make_window(x: int, z: int) -> void:
 	l.shadow_enabled = false
 	l.position = Vector3(wx, 1.6, wz) + dir * 1.5
 	add_child(l)
+
+	var sb := StaticBody3D.new()
+	sb.collision_layer = 1
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = Vector3(2.0, 3.0, 1.6)
+	cs.shape = sh
+	sb.add_child(cs)
+	add_child(sb)
+	sb.position = Vector3(wx, 1.5, wz)
 	Sound.make_loop(self, "wind", l.position, -14.0, 14.0)
 
 
@@ -282,9 +306,7 @@ func _make_door(x: int, z: int, locked: bool) -> void:
 	add_child(d)
 	d.global_position = cell_to_world(Vector2i(x, z))
 	if locked:
-		Game.node_activated.connect(func(total: int) -> void:
-			if total >= Game.NODES_TOTAL:
-				d.locked = false)
+		Game.node_activated.connect(d.unlock_on_nodes)
 
 
 func _make_lamp(pos: Vector3, col: Color, energy: float, radius: float, flick: bool) -> void:

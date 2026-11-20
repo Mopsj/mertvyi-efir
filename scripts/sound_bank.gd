@@ -26,13 +26,13 @@ func _ready() -> void:
 		_bank[n] = s
 
 
-func get(name: String) -> AudioStream:
+func stream(name: String) -> AudioStream:
 	return _bank.get(name)
 
 
 ## Одноразовый 3D-звук в мире; сам удаляется после конца.
 func play_at(parent: Node, snd: String, pos: Vector3, db: float = 0.0, max_dist: float = 26.0, pitch: float = 1.0) -> AudioStreamPlayer3D:
-	var st := get(snd)
+	var st := stream(snd)
 	if st == null or parent == null:
 		return null
 	var p := AudioStreamPlayer3D.new()
@@ -50,7 +50,7 @@ func play_at(parent: Node, snd: String, pos: Vector3, db: float = 0.0, max_dist:
 
 ## Постоянный 3D-луп (эмбиент).
 func make_loop(parent: Node, snd: String, pos: Vector3, db: float = -6.0, max_dist: float = 30.0) -> AudioStreamPlayer3D:
-	var st := get(snd)
+	var st := stream(snd)
 	if st == null:
 		return null
 	var p := AudioStreamPlayer3D.new()
@@ -66,7 +66,7 @@ func make_loop(parent: Node, snd: String, pos: Vector3, db: float = -6.0, max_di
 
 ## Постоянный не-позиционный луп (музыкальный слой).
 func make_2d(snd: String, db: float = -20.0, pitch: float = 1.0) -> AudioStreamPlayer:
-	var st := get(snd)
+	var st := stream(snd)
 	if st == null:
 		return null
 	var p := AudioStreamPlayer.new()
