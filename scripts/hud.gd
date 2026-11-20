@@ -16,6 +16,11 @@ var _choice_root: Control
 var _end_root: Control
 var _end_title: Label
 var _end_text: Label
+var _bat_fill: ColorRect
+var _warn: Label
+var _warn_t := 0.0
+var _blink_t := 0.0
+var _low_bat := false
 
 
 func _ready() -> void:
@@ -70,6 +75,16 @@ void fragment() {
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 0.0, 2.2)
 
+	_build_battery()
+	_warn = _label(14, Color(0.90, 0.72, 0.38), HORIZONTAL_ALIGNMENT_CENTER)
+	_warn.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_warn.anchor_left = 0.0
+	_warn.anchor_right = 1.0
+	_warn.offset_top = -104.0
+	_warn.offset_bottom = -78.0
+	_warn.visible = false
+	add_child(_warn)
+
 	_build_note()
 	_build_choice()
 	_build_end()
@@ -89,10 +104,50 @@ func _label(size: int, col: Color, align: int) -> Label:
 	return l
 
 
+func _build_battery() -> void:
+	var bg := ColorRect.new()
+	bg.position = Vector2(18, -96)
+	bg.size = Vector2(214, 11)
+	bg.color = Color(0.06, 0.06, 0.055, 0.88)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
+	_bat_fill = ColorRect.new()
+	_bat_fill.position = Vector2(19, -95)
+	_bat_fill.size = Vector2(212, 9)
+	_bat_fill.color = Color(0.85, 0.62, 0.2, 0.95)
+	_bat_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bat_fill)
+
+
+func _process(delta: float) -> void:
+	if _low_bat:
+		_blink_t += delta
+		var on := fmod(_blink_t, 0.9) < 0.55
+		_bat_fill.color = Color(0.82, 0.30, 0.10, 0.95) if on else Color(0.40, 0.16, 0.06, 0.85)
+	if _warn_t > 0.0:
+		_warn_t -= delta
+		_warn.modulate.a = clampf(_warn_t, 0.0, 1.0)
+		if _warn_t <= 0.0:
+			_warn.visible = false
+
+
+func flash_warning(t: String) -> void:
+	_warn.text = t
+	_warn.visible = true
+	_warn_t = 2.6
+	_warn.modulate.a = 1.0
+
+
 func _update_status(v: float) -> void:
 	var b := "Фонарь: %d%%" % int(v)
 	if v <= 0.0:
 		b = "Фонарь разряжен"
+	_low_bat = v < 20.0
+	if not _low_bat:
+		_bat_fill.color = Color(0.85, 0.62, 0.2, 0.95)
+	_bat_fill.size.x = maxf(0.0, 212.0 * clampf(v / 100.0, 0.0, 1.0))
+	if v < 20.0 and v > 0.0 and _blink_t < 0.5:
+		flash_warning("Фонарь садится. Найди батарею или химсветильник")
 	_status.text = "%s   |   Бутыли: %d   |   Предохранители: %d   |   SHIFT — бег (шум) · CTRL — тихо · Q — бросить" % \
 		[b, Game.bottles, Game.fuses]
 

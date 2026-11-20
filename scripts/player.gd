@@ -22,6 +22,7 @@ var _lamp: SpotLight3D
 var _ray: RayCast3D
 var _head: Node3D
 var _lamp_on := false
+var _low_warn := false
 var _step_phase := 0.0
 var _bob_t := 0.0
 
@@ -126,7 +127,14 @@ func _physics_process(delta: float) -> void:
 		if battery <= 0.0:
 			_lamp_on = false
 			_lamp.visible = false
-	_lamp.light_energy = 2.4 * (0.35 + 0.65 * clampf(battery / 30.0, 0.0, 1.0))
+			Game.ui.flash_warning("Фонарь погас. Ищи батарею, аварийные лампы или фосфорные метки")
+	if battery < 20.0 and not _low_warn and _lamp_on:
+		_low_warn = true
+		Game.ui.flash_warning("Фонарь садится")
+	var base_e := 2.4 * (0.35 + 0.65 * clampf(battery / 30.0, 0.0, 1.0))
+	if battery < 20.0:
+		base_e *= 1.0 - randf_range(0.0, 0.28 - battery * 0.01)
+	_lamp.light_energy = base_e
 
 	var t: Node = _ray.get_collider()
 	if t != null and t.has_method("get_prompt"):
@@ -147,6 +155,14 @@ func _play_step(crouch: bool, sprint: bool) -> void:
 	else:
 		Sound.play_at(parent, "step", pos, -12.0, 18.0, randf_range(0.95, 1.08))
 		Game.emit_noise(pos, Game.current_floor, NOISE_WALK)
+
+
+func recharge_battery(v: float) -> void:
+	battery = clampf(battery + v, 0.0, 100.0)
+	if battery >= 20.0:
+		_low_warn = false
+	Game.battery_changed.emit(battery)
+	Game.ui.flash_warning("Батарея: %d%%" % int(battery))
 
 
 func _toggle_lamp() -> void:

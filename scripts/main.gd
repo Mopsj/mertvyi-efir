@@ -19,6 +19,14 @@ func _ready() -> void:
 	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	_env.tonemap_exposure = 1.0
 	_env.tonemap_white = 6.0
+	# Экспозиция фиксированная: CameraAttributes не назначаются,
+	# авто-экспозиция в Godot 4 выключена по умолчанию (правило 5).
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.55
+	_env.glow_strength = 1.0
+	_env.glow_bloom = 0.03
+	_env.glow_hdr_threshold = 0.9
+	_env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env_node = WorldEnvironment.new()
 	env_node.environment = _env
 	add_child(env_node)
